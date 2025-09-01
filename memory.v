@@ -115,4 +115,41 @@ Proof.
     now rewrite Nat.eqb_refl. 
 Qed.
 
+(*
+  segment (m:Mem) (a n:nat) : list Data
+  Given a piece of mem, a starting address, and num of items,
+  returns list of respective data elements
+  
+  The lemma is stating that the length of this list is the same as the number of items
+
+  Proof:
+    1) Unfold segment with the format of its output
+       New goal: length (map m (seq a n).) = n
+    2) From standard library
+        map_length
+      : forall (A B : Type) (f : A -> B) (l : list A), length (map f l) = length l
+
+      i.e. length (map f l) = length l
+
+      Thus, since segment := map m (seq a n), length (map m (seq a n)) = length ((seq a n))
+      
+      Thus, new goal is length ((seq a n)) = n
+
+    3) From standard library
+        seq_length
+        : forall len start : nat, length (seq start len) = len
+      
+      Thus, new goal is n = n
+      
+    4) n = n, reflexivity
+*)
+Lemma segment_length (m:Mem) a n :
+  length (segment m a n) = n.
+Proof.
+  unfold segment.
+  rewrite List.map_length.
+  rewrite List.seq_length.
+  reflexivity.
+Qed.
+
 End Memory.
