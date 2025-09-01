@@ -1,40 +1,56 @@
-(* IO.v
-   Tiny signal/trace model for pins on the board
-   One sample per pin per tick; if nobody drives a pin this tick, it holds. *)
+(* 
+  IO.v
+  Small pin and trace model
+  
+  One sample per pin per tick; if nobody drives a pin this tick, it holds. 
+  
+  *)
 
 From Coq Require Import List Arith Bool.
 Import ListNotations.
 
 Module IO.
 
-(* --- Pins & Values --- *)
-
-(* Identify pins by number for now. Easy to change later. *)
+(* 
+  Identify pins by number for now. 
+*)
 Definition Pin := nat.
 
-(* Value carried by a pin each tick. Start with bool; swap to bytes/words later. *)
+(* 
+  Value carried by a pin each tick.
+  Using booleans currently, may change
+ *)
+
 Definition Val := bool.
 
-(* What a pin reads before it has any samples. *)
+(* 
+  What a pin reads before it has any samples. 
+*)
 Definition default : Val := false.
 
-(* --- Traces & Board --- *)
 
-(* Pins history, ordered oldest to newest. *)
+(* 
+  Pins history, ordered oldest to newest. 
+*)
 Definition Trace := list Val.
 
-(* Lookp table for the whole board: for any pin, give me its trace. *)
+(* 
+  Lookp table for the whole board: for any pin, give me its trace. 
+*)
 Definition Board := Pin -> Trace.
 
-(* --- Helpers on traces/boards --- *)
 
-(* Return the last sample of a trace, or [d] if the trace is empty.
-   We reverse to make the last element the head, then pattern match/deconstruct *)
+(* 
+  Return the last sample of a trace, or [d] if the trace is empty.
+  We reverse to make the last element the head, then pattern match/deconstruct 
+*)
 Definition last_with (d:Val) (tr:Trace) : Val :=
   match rev tr with
   | [] => d
   | v :: _ => v
   end.
+
+Check last_with.
 
 (* Append one sample to exactly one pin\u2019s trace; other pins are untouched. *)
 Definition write_pin (b:Board) (p:Pin) (v:Val) : Board :=
@@ -43,28 +59,58 @@ Definition write_pin (b:Board) (p:Pin) (v:Val) : Board :=
     then b p' ++ [v]
     else b p'.
 
-(* \u201cHold\u201d semantics for a single pin: repeat its last value this tick.
-   If the trace is empty, we use [default]. *)
+(* 
+  For a single pin: repeat its last value this tick.
+  If the trace is empty, we use [default]. 
+*)
 Definition hold_pin (b:Board) (p:Pin) : Board :=
   write_pin b p (last_with default (b p)).
 
-(* A per-tick proposal: for each pin, either drive [Some v] this tick,
-   or [None] meaning \u201cI won\u2019t drive it; let it hold\u201d. *)
+(* 
+  Functions in coq are total, this means they must be defined
+   for every antecedent of that type; so, you must be able to call
+   it on every pin. 
+   
+   Thus, it either returns some or none, depending
+   on if its being updated in that tick. 
+  *)
 Definition Update := Pin -> option Val.
 
-(* Apply one tick\u2019s worth of updates to the whole board.
-   Every pin grows by exactly one sample:
-     - if [upd p = Some v], append [v]
-     - otherwise, append the held value (repeat last; [default] if empty) *)
+(* 
+  Apply one tick’s worth of updates:
+   For each pin p, append exactly one new sample:
+     - if upd p = Some v, append v (component drives p this tick)
+     - if upd p = None, append the held value (repeat last; default if empty) 
+
+  given board and update type (mapping every pin to new value
+  for that tick, some or none), output a new board with those changes
+
+  since the whole thing has a board type and board maps pin->trace,
+  coq infers p is of type pin, and that the consequent must produce a trace.
+
+  b p is function application by juxtaposition, b is applied to p
+  and since board is pin -> trace, board->pin->trace (think of it as curried function)
+
+  ++ is concatenation, so to the trace you're adding the result of the
+  match expression
+
+  if Val is none, then get the latest value in the trace and append
+  that value again to the trace, so for next tick same value repeated
+*)
 Definition apply_updates (b:Board) (upd:Update) : Board :=
-  fun p =>
-    b p ++
-    [ match upd p with
-      | Some v => v
-      | None   => last_with default (b p)
+  fun (p : Pin) =>
+    (b p : Trace) ++
+    [ match (upd p : option Val) with
+      | Some v => (v : Val)
+      | None   => (last_with default (b p) : Val)
       end ].
 
-(* Equality restricted to one pin\u2019s trace. Handy for non-interference lemmas. *)
+(*
+  Curried function mapping 
+  pin -> board -> board -> prop
+
+  Sees if the same pin on two boards has same value
+*)
 Definition eq_on_pin (p:Pin) (b1 b2:Board) : Prop :=
   b1 p = b2 p.
 

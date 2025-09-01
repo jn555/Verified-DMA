@@ -1,0 +1,16 @@
+# macOS
+.DS_Store
+
+# Coq build artifacts
+*.vo
+*.vos
+*.vok
+*.glob
+*.aux
+
+#Makefiles (coq automatically generates these from the _Coqproject)
+Makefile
+Makefile.conf
+.Makefile.d
+
+.vscode/
