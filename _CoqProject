@@ -3,3 +3,4 @@
 io.v
 wiring.v
 memory.v
+dma.v
