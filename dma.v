@@ -154,5 +154,202 @@ Proof.
   lia.
 Qed.
 
+(*
+  When you copy one element, both src and dst bump by 1 and the 
+  remaining length drops by 1. 
+  
+  Disjointness should still hold for the tail.
+
+  Lemma:
+    Input src index a, dst index b, and mutual length m
+
+    S is the successor constructor for a nat m
+
+    Since nats are defined inductively, so get the next number you do (S n), for nat n
+
+    Thus,
+    Given starting mem addresses a and b, 
+    If a and b are disjoint over range of mutual mem length of m + 1
+    (i.e. a + (m + 1) <= b \/ b + (m + 1) <= a, which are two mutually exclusive conditions)
+
+    then after copying/consuming one element, and thus proceeding/shifting to next to consume,
+    the remaining length is still disjoint (so you decement m as well from m + 1 as the total
+    mem length has to stay consistent).
+
+  Proof:
+    Goal: disjoint_range a b (S m) -> disjoint_range (S a) (S b) m.
+    1. Unfolding disjoint_range definition
+    Goal: a + (S m) <= b \/ b + (S m) <= a
+          -> (S a) + m <= (S b) \/ (S b) + m <= (S a).
+
+    2. Introduce the LHS of the implication as an assumption, and decontruct it into LHS and RHS of OR
+    Thus, new goal is the RHS
+
+    So, two branches
+
+    Branch 1:
+      a + (S m) <= b
+      -> (S a) + m <= (S b) \/ (S b) + m <= (S a).
+
+    Branch 2:
+      b + (S m) <= a
+      -> (S a) + m <= (S b) \/ (S b) + m <= (S a).
+
+    Both branches proven with lia inequality solver.
+
+    Explanation:
+
+    Branch 1:
+    a + (S m) <= b 
+    = S (a + m) <= b
+    = (S a) + m <= b
+    by associative property of addition
+
+    and since b <= S b
+
+    = (S a) + m <= (S b)
+*)
+
+Lemma disjoint_shift (a b m : nat) :
+  disjoint_range a b (S m) ->
+  disjoint_range (S a) (S b) m.
+Proof.
+  unfold disjoint_range; intros [H|H].
+  - left;  lia.   (* a+(S m) <= b  ⇒  (S a)+m <= (S b) *)
+  - right; lia.   (* b+(S m) <= a  ⇒  (S b)+m <= (S a) *)
+Qed.
+
+
+(*
+  Writing outside segment doesnt change it
+
+  Inputting a memory block m
+  and an index w you wanna write to
+  And a memory chunk a -> a + m
+
+  mem.segment returns the data starting from a to a+n
+
+  Lemma:
+    if the write address w is not within the memory chunk a
+
+    then writing to w with data v (which returns a new memory type), and 
+    taking mem.segment of segment a (which returns all the data from a->a+n) 
+    equals the same list of data as if you didn't do the write to w.
+
+  Proof:
+  1. intro Hout.
+    introduce LHS of implication as assumption (rather than prev where whole exp was goal)
+
+    Now, new goal is
+    (Mem.segment (Mem.write m w v) a n = Mem.segment m a n)
+
+  2. Unfold Mem.segment
+  So new goal is:
+
+  (Mem.segment (Mem.write m w v) a n = Mem.segment m a n).
+
+  Whole exp:
+  (w < a) ∨ ((a + n) ≤ w )
+  → (Mem.segment (Mem.write m w v) a n = Mem.segment m a n).
+
+  (w < a) ∨ ((a + n) ≤ w )
+  → [ (map [ (Mem.write m w v) ] (seq a n)) ] = [ map m (seq a n) ].
+
+      * seq is standard library function which constructs list of 
+      sequential nat's starting at a (starting address)
+      * map applies a function to every element of a list
+      * thus, (seq a n) generated list of sucessive nats from a -> n
+      and you're applying a memory type to this list
+      * since Mem  := Addr → Data, memory (nat (nat)) = data
+      * so you're checking equivilance for the list of data elements of both sides
+
+  3. apply List.map_ext_in
+  To transform list equality goal into a pointwise goal (i.e. for each point)
+
+  Lemma map_ext_in :
+  ∀ (A B : Type) (f g: A → B) l, 
+    (∀ a, In a l → f a = g a) → map f l = map g l.
+
+  Pontwise equality of elements -> equality of mapped lists
+
+  So, turns list equality into “for all x ∈ seq a n, the two functions agree”
+
+  4. Adds LHS of goal implication to assumptions, so new goal is just RHS
+
+  Prev goal: forall a0 : Mem.Addr, In a0 (seq a n) -> Mem.write m w v a0 = m a0
+
+  New assumptions: 
+  ...
+  x : Mem.Addr
+  Hx : In x (seq a n)
+  New goal: Mem.write m w v a0 = m a0
+
+  5. apply List.in_seq in Hx as [HxL HxR].
+
+  Lemma in_seq len start n :
+  In n (seq start len) ↔ start ≤ n < start+len.
+
+  Tells you if n is within (start) → (start+len)
+
+  Lets you convert between in-set relationship to bounds
+
+  So, prev the assumption was: (Mem.Addr x) ∈ (seq a n)
+  Which means x is within the address range list for a
+
+  Now, we express that in terms of bounds:
+  L (x >= a) && R (x < a + n)
+
+  6. Assert (P) by T creates a subgoat P; if tactic T solves it, then it adds it to hypothesis
+  
+  Since (w < a) ∨ (a + n ≤ w)
+  and a ≤ x
+  and x < a + n
+
+  Then:
+  Case 1:
+  w < a ≤ x
+
+  Thus W ≠ x
+
+  Case 2:
+  x < a + n ≤ w
+
+  Thus W ≠ x
+
+  Proven by lia (inequality solver)
+
+  (x <> w) added to hypotheses
+
+  7. Incorperating existing lemma: Mem.write_preserve
+
+  Lemma: writing at address a does not affect reads at any different address x.
+
+  Since:
+  write: (m:Mem) (a:Addr) (v:Data) → Mem
+
+  and
+  Mem  := Addr -> Data.
+
+  We are trying to prove that writing data v to address w, which returns a memory type
+  And then mem: addr -> data (calling that memory function with address x, arbitrary different address)
+  Results in the same data as if we didnt write to v
+
+  Which that previous lemma proved
+*)
+Lemma segment_write_outside (m:Mem.Mem) (a n w:Mem.Addr) (v:Mem.Data) :
+  (* w is outside [a, a+n) *)
+  (w < a) \/ ((a + n) <= w )
+  -> (Mem.segment (Mem.write m w v) a n = Mem.segment m a n).
+Proof.
+  intro Hout.
+  unfold Mem.segment.  (* map m (seq a n) *)
+  apply List.map_ext_in. 
+  intros x Hx.
+  apply List.in_seq in Hx as [HxL HxR].  (* a <= x < a+n *)
+  assert (x <> w) by (intros ->; lia).
+  now rewrite (Mem.write_preserve m w v x).
+Qed.
+
+
 
 End DMA.
