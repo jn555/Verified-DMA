@@ -38,6 +38,30 @@ Module DMA.
   (*
     If len = 0, do nothing.
     Else: read mem[src], write it to mem[dst], then bump src, dst, dec len.
+
+    Inputs state
+    Matches the lengh of the state
+      For 0 length -> then return the state as is, dont modify it
+    
+      For nonzero length, i.e. can be represented through a sucessor function, since
+      nats are defined recursively, and any nonzero nat is thus defined as S _, for some 
+      chain of sucessor functions.
+
+      let b   := Mem.read s.(mem) s.(src) in
+        # in is ocaml let-in style binding; set b to evaluated exp Mem.read s.(mem) s.(src)
+          and use that b inside the body (rest of function)
+
+      So, 
+      introduces a term *B* representing the src value 
+      Introduces term *mem'* representing the new memory type after writing the b term into the dst
+
+      Both of these terms defined for the following block:
+
+      Defining the new src to be the successor for the old (incrementing mem address)
+      Defining the new dst to be the successor for the old (incrementing mem address)
+      Defining new lenth to be decrement of old (pred is predecessor func on nats)
+      Setting new mem to the modified one with the copied element
+
   *)
   Definition step (s:State) : State :=
     match s.(len) with
@@ -52,6 +76,17 @@ Module DMA.
     Do one step of DMA operation, and calls itself recursively
 
     Provide n for the number of steps you wanna simulate
+
+
+    N is number of steps you wanna simulate from the current state 
+
+    If n is 0, i.e. you've completed all the steps, then return the current state (dont run)
+
+    If n is greater than 0 (i.e. can be represented as S n, since nats are defined recursively,
+      so any number greater than 0 is a chain of successor (S) functions of the previous).
+    Then, call run with the number one less than n (i.e. the nat which N is the sucessor of)
+      i.e. recursively call same function with one smaller n, and stepped state
+      And stepped state does one copy from the src to the address, decrementing the len
   *)
   Fixpoint run (n:nat) (s:State) : State :=
     match n with
@@ -350,6 +385,89 @@ Proof.
   now rewrite (Mem.write_preserve m w v x).
 Qed.
 
+
+
+(*
+  Copy k-cells lemma
+
+  If source and destination ranges in the initial state s0 are disjoint 
+  and you run k steps (with k ≤ len s0), then the first k cells at dst in 
+  the resulting memory equal the first k original cells at src in the initial memory.
+
+  Lemma: 
+  If the DMA operation's src and dst are disjoint for len
+
+  Then if inputted k (number of cells to copy) is less than the source length
+
+  Then after running the DMA for k steps (i.e copying from src->dst), the data 
+  in the first k addresses in the dst equal the data in the first k addresses of the src.
+
+    Run: 
+      Do one step of DMA operation by calling STEP, and calls itself recursively
+      Provided n for the number of steps you wanna simulate
+
+    Step: 
+      If len = 0, do nothing.
+      Else: read mem[src], write it to mem[dst], then bump src, dst, dec len.
+
+    
+  Proof:
+
+
+
+
+
+*)
+
+(*
+
+  Within the current DMA operation state
+  if the src and dst are disjoint in mem
+
+  then if, the k steps you wanna run of the copy is less than the length of the mem youre copying
+
+  into mem.segement, inputting:
+    - memory after running k copy steps to dst
+    - the dst memory address
+    - k (number of steps you're running)
+  which returns the associated new data in the dst (specifically the copied range)
+
+  and you're checking that it equsls the data in the same range within the src
+
+
+*)
+
+(*
+  Mem.segment returns the data for inputted addresses/range
+
+  Can't apply List.map_ext_in directly 
+
+  They're different domains as:
+  they're not necesarily the same address range (one w/r dst, other src)
+  
+  Need to somehow prove that this comparison is still valid
+*)
+
+Lemma seq_reindex (dst: Mem.Addr) (src: Mem.Addr) (k : nat) :
+  map (fun a => src + (a - dst)) (seq dst k) = seq src k.
+Proof.
+  revert dst src.
+  induction k as [|k IH]; intros dst src.
+  - simpl. reflexivity.
+  - simpl. rewrite IH.
+    f_equal. lia.
+Qed.
+
+Lemma after_k_copies_segment (s0:State) (k:nat) :
+  disjoint_range s0.(src) s0.(dst) s0.(len) ->
+  k <= s0.(len) ->
+  Mem.segment (run k s0).(mem) s0.(dst) k = Mem.segment s0.(mem) s0.(src) k.
+Proof.
+  intro disjoint_range.
+  intro step_length.
+  unfold Mem.segment.
+  rewrite <- (seq_reindex (dst s0) (src s0) k).
+Qed.
 
 
 End DMA.
